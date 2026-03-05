@@ -161,8 +161,8 @@ All evidence screenshots are available in the `/screenshots` folder:
 ## 📬 **Contact**
 
 **Joeassessment1**  
-[Your Email Address]  
-[Your LinkedIn Profile URL]
+josephoadagba@gmail.com 
+https://www.linkedin.com/in/adagba-joseph
 
 ---
 
